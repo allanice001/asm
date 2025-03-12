@@ -1,0 +1,308 @@
+1. Networking
+
+This includes actions related to networking and security groups, load balancers, DNS, and events:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
+        "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "route53:ChangeResourceRecordSets",
+        "route53:ListResourceRecordSets",
+        "route53:GetChange",
+        "route53:ListHostedZones",
+        "elasticloadbalancing:CreateLoadBalancer",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "events:PutRule",
+        "events:DeleteRule",
+        "events:DescribeRule"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "NetworkingActions"
+    }
+  ]
+}
+
+2. IAM (Identity and Access Management)
+
+This policy covers actions for managing roles and associated IAM resources:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "iam:CreateRole",
+        "iam:CreatePolicy"
+        "iam:ListRoles",
+        "iam:GetRole"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "IAMActions"
+    }
+  ]
+}
+
+3. Compute
+
+This policy includes actions related to EC2, Auto Scaling, Lambda, ECS, and others:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "application-autoscaling:DescribeScalableTargets",
+        "application-autoscaling:DescribeScalingActivities",
+        "application-autoscaling:DescribeScalingPolicies",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:PutScalingPolicy",
+        "application-autoscaling:RegisterScalableTarget",
+        "application-autoscaling:DeleteScalingPolicy",
+        "ec2:DescribeInstances",
+        "ec2:DescribeLaunchTemplates",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:CreateLaunchTemplate",
+        "ec2:CreateLaunchTemplateVersion",
+        "ec2:DescribeLaunchTemplateVersions",
+        "ec2:ModifyLaunchTemplate",
+        "ec2:DeleteLaunchTemplate",
+        "ec2:CreateTags",
+        "ec2:DeleteTags",
+        "ec2:CreateVolume",
+        "ec2:DeleteVolume",
+        "ec2:AttachVolume",
+        "ec2:DetachVolume",
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribeLaunchConfigurations",
+        "autoscaling:DescribePolicies",
+        "autoscaling:PutScalingPolicy",
+        "autoscaling:DeletePolicy",
+        "codepipeline:StartPipelineExecution",
+        "codepipeline:GetPipeline",
+        "codepipeline:GetPipelineExecution",
+        "codepipeline:ListPipelines",
+        "codebuild:StartBuild",
+        "codebuild:BatchGetBuilds",
+        "codebuild:ListBuilds",
+        "lambda:CreateFunction",
+        "lambda:DeleteFunction",
+        "lambda:GetFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:InvokeFunction",
+        "ecs:CreateCluster",
+        "ecs:DeleteCluster",
+        "ecs:DescribeClusters",
+        "ecs:RegisterTaskDefinition",
+        "ecs:DeregisterTaskDefinition"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "ComputeActions"
+    }
+  ]
+}
+
+4. Database
+
+This policy covers DynamoDB, Redshift, DAX, and other database services:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+          "CreateTable"
+          "DeleteTable"
+          "CreateBackup"
+          "CreateGlobalTable"
+          "Describe*"
+          "List*"
+          "UpdateGlobalTable"
+          "CreateTableReplica"
+          "DeleteTableReplica"
+          "DeleteBackup"
+          *"GetResourcePolicy"
+          *"DeleteResourcePolicy"
+          *"PutResourcePolicy" - possible external access issue 'principal:*'
+          "DisableKinesisStreamingDestination"
+          "EnableKinesisStreamingDestination"
+          "UpdateKinesisStreamingDestination"
+          *"ExportTableToPointInTime" - to be validated
+          *"GetAbacStatus" - to be validated
+          *"UpdateAbacStatus" - to be validated
+          "ImportTable"
+          *"RestoreTableFromAwsBackup" - to be validated
+          *"RestoreTableFromBackup" - to be validated
+          "TagResource"
+          "UntagResource"
+          "UpdateContinuousBackups"
+          "UpdateContributorInsights"
+          "UpdateGlobalTableSettings"
+          "UpdateTable"
+          "UpdateTableReplicaAutoScaling"
+          "UpdateTimeToLive"
+        "redshift:CreateCluster", - to be validated (possibly to add to service catalogue)
+        "redshift:DeleteCluster", - to be validated (possibly to add to service catalogue)
+        "redshift:DescribeClusters", - to be validated (possibly to add to service catalogue)
+        "dax:CreateCluster",
+        "dax:DeleteCluster",
+        "dax:DescribeClusters"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "DatabaseActions"
+    }
+  ]
+}
+
+5. Storage
+
+This policy includes actions for S3, ECR, and other storage-related services:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:DescribeRepositories",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchCheckLayerAvailability"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "StorageActions"
+    }
+  ]
+}
+
+6. Security & Encryption
+
+This policy includes actions for ACM, KMS, and Secrets Manager related to encryption and secrets management:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "acm:ListCertificates",
+        "acm:DescribeCertificate",
+        "acm:ExportCertificate",
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "SecurityAndEncryptionActions"
+    }
+  ]
+}
+
+7. Application Services
+
+This policy includes actions for services like AppSync, SageMaker, and MQ:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "appsync:CreateApiKey",
+        "appsync:DeleteApiKey",
+        "appsync:ListApiKeys",
+        "sagemaker:CreateNotebookInstance",
+        "sagemaker:DeleteNotebookInstance",
+        "sagemaker:DescribeNotebookInstance",
+        "sagemaker:StartNotebookInstance",
+        "sagemaker:StopNotebookInstance",
+        "mq:CreateBroker",
+        "mq:DeleteBroker",
+        "mq:DescribeBroker",
+        "kafka:CreateCluster",
+        "kafka:DeleteCluster",
+        "kafka:DescribeCluster"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "ApplicationServicesActions"
+    }
+  ]
+}
+
+8. Monitoring and Logging
+
+This policy includes actions for CloudWatch, CloudTrail, and other monitoring/logging services:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "cloudtrail:LookupEvents",
+        "cloudfront:CreateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:GetDistribution",
+        "cloudfront:ListDistributions",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "MonitoringAndLoggingActions"
+    }
+  ]
+}
+
+9. Messaging & Queueing
+
+This policy includes actions for SQS, SNS, and other messaging-related services:
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:Publish",
+        "sqs:CreateQueue",
+        "sqs:DeleteQueue",
+        "sqs:GetQueueUrl",
+        "sqs:SendMessage"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "MessagingAndQueueingActions"
+    }
+  ]
+}

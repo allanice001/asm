@@ -1,0 +1,206 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                       String                        @id
+  name                     String
+  email                    String?
+  status                   String                        @default("active")
+  ouId                     String? // Add OU ID
+  ouName                   String? // Add OU Name
+  ouPath                   String? // Add OU Path
+  lastUpdated              DateTime                      @default(now())
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+  deployments              Deployment[]
+  permissionSetAssignments PermissionSetAssignment[]
+  rolePolicyAssignments    AccountRolePolicyAssignment[] // Add this relation
+}
+
+// Auth.js models
+model User {
+  id                   String                       @id @default(cuid())
+  name                 String?
+  email                String                       @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  role                 UserRole                     @default(VIEWER)
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  sessions             Session[]
+  deployments          Deployment[]                 @relation("InitiatedBy")
+  permissionSetChanges PermissionSetChangeHistory[] @relation("ChangedBy")
+  roleChanges          RoleChangeHistory[]          @relation("ChangedBy")
+  policyChanges        PolicyChangeHistory[]        @relation("ChangedBy")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Role {
+  id                       String                        @id @default(cuid())
+  name                     String
+  description              String?
+  trustPolicy              String                        @db.Text
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+  deployments              Deployment[]
+  changeHistory            RoleChangeHistory[]
+  policies                 Policy[]                      @relation("RolePolicies")
+  accountPolicyAssignments AccountRolePolicyAssignment[] // Add this relation
+}
+
+model Policy {
+  id                     String                        @id @default(cuid())
+  name                   String
+  description            String?
+  policyDocument         String                        @db.Text
+  type                   PolicyType                    @default(CUSTOM)
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  roles                  Role[]                        @relation("RolePolicies")
+  changeHistory          PolicyChangeHistory[]
+  accountRoleAssignments AccountRolePolicyAssignment[] // Add this relation
+}
+
+// New model for account-specific role-policy assignments
+model AccountRolePolicyAssignment {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  policyId  String
+  policy    Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, roleId, policyId])
+}
+
+enum PolicyType {
+  AWS_MANAGED
+  CUSTOM
+}
+
+model PermissionSet {
+  id              String                       @id @default(cuid())
+  name            String
+  description     String?
+  sessionDuration String                       @default("PT8H")
+  managedPolicies String[]
+  inlinePolicy    String                       @db.Text
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  deployments     Deployment[]
+  changeHistory   PermissionSetChangeHistory[]
+  assignments     PermissionSetAssignment[]
+}
+
+model PermissionSetAssignment {
+  id              String        @id @default(cuid())
+  permissionSetId String
+  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id])
+  accountId       String
+  account         Account       @relation(fields: [accountId], references: [id])
+  status          String        @default("pending") // pending, deployed, failed, out-of-sync
+  lastDeployedAt  DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([permissionSetId, accountId])
+}
+
+model Deployment {
+  id              String          @id @default(cuid())
+  status          String          @default("pending") // pending, in-progress, success, failed
+  initiatedBy     String
+  initiatedByUser User?           @relation("InitiatedBy", fields: [initiatedBy], references: [id])
+  roles           Role[]
+  permissionSets  PermissionSet[]
+  accounts        Account[]
+  logs            String?         @db.Text
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  completedAt     DateTime?
+  deploymentLogs  DeploymentLog[] // Add this relation
+}
+
+model DeploymentLog {
+  id           String     @id @default(cuid())
+  deploymentId String
+  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  message      String
+  details      String?    @db.Text
+  level        String     @default("INFO") // INFO, WARN, ERROR
+  createdAt    DateTime   @default(now())
+}
+
+model PermissionSetChangeHistory {
+  id              String        @id @default(cuid())
+  permissionSetId String
+  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id])
+  changeType      String // create, update, delete
+  previousState   String?       @db.Text
+  newState        String        @db.Text
+  changedBy       String
+  changedByUser   User          @relation("ChangedBy", fields: [changedBy], references: [id])
+  createdAt       DateTime      @default(now())
+}
+
+model RoleChangeHistory {
+  id            String   @id @default(cuid())
+  roleId        String
+  role          Role     @relation(fields: [roleId], references: [id])
+  changeType    String // create, update, delete
+  previousState String?  @db.Text
+  newState      String   @db.Text
+  changedBy     String
+  changedByUser User     @relation("ChangedBy", fields: [changedBy], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+model PolicyChangeHistory {
+  id            String   @id @default(cuid())
+  policyId      String
+  policy        Policy   @relation(fields: [policyId], references: [id])
+  changeType    String // create, update, delete
+  previousState String?  @db.Text
+  newState      String   @db.Text
+  changedBy     String
+  changedByUser User     @relation("ChangedBy", fields: [changedBy], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+model DeploymentReport {
+  id          String   @id @default(cuid())
+  name        String
+  period      String // DAILY, WEEKLY, MONTHLY
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  data        String // JSON data containing the report
+  createdBy   String?
+  isScheduled Boolean  @default(false)
+}
