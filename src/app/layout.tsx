@@ -4,6 +4,8 @@ import { Inter } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";
 import { AuthLayout } from "@/components/auth-layout";
 import {ThemeProvider} from "@/components/theme-provider";
+import {Toaster} from "@/components/ui/sonner";
+import {QueryProvider} from "@/components/query-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,8 +24,13 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <AuthLayout>{children}</AuthLayout>
+            <AuthLayout>
+              <QueryProvider>
+                {children}
+              </QueryProvider>
+            </AuthLayout>
           </ThemeProvider>
+          <Toaster richColors closeButton position={'top-center'} />
         </AuthProvider>
       </body>
     </html>

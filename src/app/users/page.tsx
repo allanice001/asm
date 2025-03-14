@@ -1,47 +1,45 @@
 "use client"
 
-import {
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Input,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
-  useDisclosure,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalCloseButton,
-  ModalBody,
-  ModalFooter,
-  FormControl,
-  FormLabel,
-  Text,
-  Checkbox,
-  CheckboxGroup,
-  Stack,
-  useToast,
-} from "@chakra-ui/react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getUsers, createUser, updateUser as updateUserAPI, deleteUser as deleteUserAPI, getRoles } from "@/lib/api"
+import { getUsers, createUser, updateUser, deleteUser, getRoles } from "@/lib/api"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, Plus, Pencil, Trash2 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {toast} from "sonner";
 
-const UsersPage = () => {
-  const { isOpen, onOpen, onClose } = useDisclosure()
+export default function UsersPage() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [selectedRoles, setSelectedRoles] = useState<string[]>([])
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
-  const [selectedUser, setSelectedUser] = useState<any>(null)
-  const toast = useToast()
+  const [userToDelete, setUserToDelete] = useState<any>(null)
 
   const queryClient = useQueryClient()
 
@@ -54,7 +52,7 @@ const UsersPage = () => {
     queryFn: getUsers,
   })
 
-  const { data: roles } = useQuery({
+  const { data: roles, isLoading: isRolesLoading } = useQuery({
     queryKey: ["roles"],
     queryFn: getRoles,
   })
@@ -63,66 +61,46 @@ const UsersPage = () => {
     mutationFn: createUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] })
-      onClose()
-      toast({
-        title: "User created.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
+      setIsDialogOpen(false)
+      toast.success("User created",{
+        description: "The user has been created successfully.",
       })
     },
     onError: (error: any) => {
-      toast({
-        title: "Error creating user.",
-        description: error.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
+      toast.error("Error creating user",{
+        description: error.message || "An error occurred while creating the user.",
       })
     },
   })
 
   const updateUserMutation = useMutation({
-    mutationFn: updateUserAPI,
+    mutationFn: updateUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] })
-      onClose()
-      toast({
-        title: "User updated.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
+      setIsDialogOpen(false)
+      toast.success("User updated", {
+        description: "The user has been updated successfully.",
       })
     },
     onError: (error: any) => {
-      toast({
-        title: "Error updating user.",
-        description: error.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
+      toast.error("Error updating user",{
+        description: error.message || "An error occurred while updating the user.",
       })
     },
   })
 
   const deleteUserMutation = useMutation({
-    mutationFn: deleteUserAPI,
+    mutationFn: deleteUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] })
-      toast({
-        title: "User deleted.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
+      setIsDeleteDialogOpen(false)
+      toast.success("User deleted",{
+        description: "The user has been deleted successfully.",
       })
     },
     onError: (error: any) => {
-      toast({
-        title: "Error deleting user.",
-        description: error.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
+      toast.error("Error deleting user",{
+        description: error.message || "An error occurred while deleting the user.",
       })
     },
   })
@@ -142,149 +120,212 @@ const UsersPage = () => {
     }
   }
 
-  const handleDeleteUser = async (id: string) => {
-    await deleteUserMutation.mutateAsync(id)
-  }
-
-  const handleEditUser = (user: any) => {
-    setIsEditMode(true)
-    setSelectedUserId(user.id)
-    setName(user.name)
-    setEmail(user.email)
-    setSelectedUser(user)
-    const userRoles = selectedUser?.roles?.length > 0 ? selectedUser.roles : []
-    setSelectedRoles(userRoles.map((role: any) => role.id))
-    onOpen()
-  }
-
-  useEffect(() => {
-    if (selectedUser) {
-      setName(selectedUser.name)
-      setEmail(selectedUser.email)
-      const userRoles = selectedUser?.roles?.length > 0 ? selectedUser.roles : []
-      setSelectedRoles(userRoles.map((role: any) => role.id))
+  const handleDeleteUser = async () => {
+    if (userToDelete) {
+      await deleteUserMutation.mutateAsync(userToDelete.id)
     }
-  }, [selectedUser])
+  }
 
-  const handleOpenModal = () => {
+  const handleOpenCreateDialog = () => {
     setIsEditMode(false)
     setSelectedUserId(null)
     setName("")
     setEmail("")
     setSelectedRoles([])
-    setSelectedUser(null)
-    onOpen()
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenEditDialog = (user: any) => {
+    setIsEditMode(true)
+    setSelectedUserId(user.id)
+    setName(user.name)
+    setEmail(user.email)
+    setSelectedRoles(user.roles?.map((role: any) => role.id) || [])
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenDeleteDialog = (user: any) => {
+    setUserToDelete(user)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleRoleChange = (roleId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRoles([...selectedRoles, roleId])
+    } else {
+      setSelectedRoles(selectedRoles.filter((id) => id !== roleId))
+    }
   }
 
   return (
-    <Box p={4}>
-      <Flex justifyContent="space-between" alignItems="center" mb={4}>
-        <Heading as="h1" size="xl">
-          Users
-        </Heading>
-        <Button colorScheme="blue" onClick={handleOpenModal}>
-          Create User
-        </Button>
-      </Flex>
+    <div className="container mx-auto py-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Users</CardTitle>
+            <CardDescription>Manage users and their role assignments</CardDescription>
+          </div>
+          <Button onClick={handleOpenCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create User
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : isError ? (
+            <div className="py-8 text-center text-muted-foreground">Error loading users. Please try again.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Roles</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      No users found. Create your first user.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users?.map((user: any) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {user.roles?.length > 0 ? (
+                            user.roles.map((role: any) => (
+                              <Badge key={role.id} variant="outline">
+                                {role.name}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted-foreground text-sm">No roles</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleOpenEditDialog(user)}>
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenDeleteDialog(user)}
+                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      <TableContainer>
-        <Table variant="simple">
-          <Thead>
-            <Tr>
-              <Th>Name</Th>
-              <Th>Email</Th>
-              <Th>Roles</Th>
-              <Th>Actions</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {isLoading ? (
-              <Tr>
-                <Td colSpan={4} textAlign="center">
-                  Loading...
-                </Td>
-              </Tr>
-            ) : isError ? (
-              <Tr>
-                <Td colSpan={4} textAlign="center">
-                  Error loading users.
-                </Td>
-              </Tr>
-            ) : (
-              users?.map((user) => (
-                <Tr key={user.id}>
-                  <Td>{user.name}</Td>
-                  <Td>{user.email}</Td>
-                  <Td>{user.roles?.map((role: any) => role.name).join(", ") || "No Roles"}</Td>
-                  <Td>
-                    <Button size="sm" colorScheme="yellow" onClick={() => handleEditUser(user)}>
-                      Edit
-                    </Button>
-                    <Button size="sm" colorScheme="red" onClick={() => handleDeleteUser(user.id)} ml={2}>
-                      Delete
-                    </Button>
-                  </Td>
-                </Tr>
-              ))
-            )}
-          </Tbody>
-        </Table>
-      </TableContainer>
-
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>{isEditMode ? "Edit User" : "Create User"}</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <FormControl>
-              <FormLabel>Name</FormLabel>
-              <Input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-            </FormControl>
-            <FormControl mt={4}>
-              <FormLabel>Email</FormLabel>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </FormControl>
-            <FormControl mt={4}>
-              <FormLabel>Roles</FormLabel>
-              {roles ? (
-                <CheckboxGroup
-                  value={selectedRoles}
-                  onChange={(values) => {
-                    setSelectedRoles(values)
-                  }}
-                >
-                  <Stack spacing={[1, 5]} direction={["column", "row"]}>
-                    {roles.map((role) => (
-                      <Checkbox key={role.id} value={role.id}>
-                        {role.name}
-                      </Checkbox>
-                    ))}
-                  </Stack>
-                </CheckboxGroup>
+      {/* Create/Edit User Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isEditMode ? "Edit User" : "Create User"}</DialogTitle>
+            <DialogDescription>
+              {isEditMode ? "Update user details and role assignments" : "Create a new user and assign roles"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter user name" />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter email address"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Roles</Label>
+              {isRolesLoading ? (
+                <div className="flex items-center justify-center py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
               ) : (
-                <Text>Loading roles...</Text>
+                <div className="grid gap-2 max-h-[200px] overflow-y-auto p-1">
+                  {roles?.map((role: any) => (
+                    <div key={role.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`role-${role.id}`}
+                        checked={selectedRoles.includes(role.id)}
+                        onCheckedChange={(checked) => handleRoleChange(role.id, checked as boolean)}
+                      />
+                      <Label htmlFor={`role-${role.id}`} className="text-sm font-normal cursor-pointer">
+                        {role.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               )}
-            </FormControl>
-          </ModalBody>
-
-          <ModalFooter>
-            <Button colorScheme="gray" mr={3} onClick={onClose}>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
             <Button
-              colorScheme="blue"
               onClick={isEditMode ? handleUpdateUser : handleCreateUser}
-              isLoading={createUserMutation.isLoading || updateUserMutation.isLoading}
+              disabled={!name || !email || createUserMutation.isPending || updateUserMutation.isPending}
             >
+              {(createUserMutation.isPending || updateUserMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {isEditMode ? "Update" : "Create"}
             </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-    </Box>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the user
+              {userToDelete && <strong> {userToDelete.name}</strong>}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteUserMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   )
 }
-
-export default UsersPage
 

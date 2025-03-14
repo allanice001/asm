@@ -18,7 +18,6 @@ const getRoleConfig = () => {
       region,
       credentials: defaultProvider({
         roleArn,
-        region,
       }),
     };
   }

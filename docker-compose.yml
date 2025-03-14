@@ -1,4 +1,25 @@
 services:
+  #app:
+  #  build:
+  #    context: .
+  #    dockerfile: Dockerfile.dev
+  #  ports:
+  #    - "3000:3000"
+  #  expose:
+  #    - 3000
+  #  volumes:
+  #    - .:/app
+  #    - /app/node_modules
+  #  env_file: .env
+  #  environment:
+  #    NODE_ENV: development
+  #    NEXTAUTH_URL: http://localhost:3000
+  #    NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+  #    AWS_REGION: us-east-1
+  #    DEPLOYMENT_TOPIC_ARN: ${DEPLOYMENT_TOPIC_ARN}
+  #    DATABASE_URL: postgres://$DB_USER:$DB_PASSWORD@postgres:5432/$DB_NAME
+  #  restart: unless-stopped
+
   postgres:
     build:
       context: postgres
