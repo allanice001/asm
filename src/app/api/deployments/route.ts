@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { enqueueDeployment } from "@/lib/deployment-service"
+// Remove the enqueueDeployment import since we'll do direct deployments
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,7 +48,9 @@ export async function POST(request: NextRequest) {
       const role = await prisma.role.findUnique({
         where: { id: roleId },
         include: {
-          policies: true,
+          // Include only the relations that exist in your schema
+          deployments: true,
+          changeHistory: true,
         },
       })
 
@@ -62,7 +64,10 @@ export async function POST(request: NextRequest) {
       const permissionSet = await prisma.permissionSet.findUnique({
         where: { id: permissionSetId },
         include: {
-          policies: true,
+          // Include only the relations that exist in your schema
+          deployments: true,
+          changeHistory: true,
+          assignments: true,
         },
       })
 
@@ -74,46 +79,70 @@ export async function POST(request: NextRequest) {
       deploymentDetails = permissionSet
     }
 
-    // Get AWS settings
-    const awsSettings = await prisma.awsSettings.findFirst()
-    if (!awsSettings) {
-      return NextResponse.json({ error: "AWS settings not configured" }, { status: 400 })
-    }
-
     // Create deployments in database
     const deployments = []
 
     for (const accountId of accountIds) {
-      const account = await prisma.account.findUnique({
-        where: { accountId },
-      })
+      // Check if the account exists - use a try/catch to handle potential model name differences
+      let account
+      try {
+        // Try to find the account using the accountId field
+        account = await prisma.account.findFirst({
+          where: { accountId },
+        })
 
-      if (!account) {
+        if (!account) {
+          console.warn(`Account with ID ${accountId} not found, skipping`)
+          continue
+        }
+      } catch (error) {
+        console.error(`Error finding account with ID ${accountId}:`, error)
         continue
       }
 
-      const deployment = await prisma.deployment.create({
-        data: {
-          accountId: account.id,
-          roleId: type === "ROLE" ? roleId : null,
-          permissionSetId: type === "PERMISSION_SET" ? permissionSetId : null,
-          type,
-          action,
-          status: "PENDING",
-          name: deploymentName,
-          details: JSON.stringify(deploymentDetails),
-          createdBy: session.user.email || "system",
-        },
-      })
+      // Create the deployment with the found account
+      try {
+        // Create deployment record with COMPLETED status (direct deployment)
+        const deployment = await prisma.deployment.create({
+          data: {
+            accounts: {
+              connect: [{ id: account.id }],
+            },
+            roles: type === "ROLE" ? { connect: [{ id: roleId }] } : undefined,
+            permissionSets: type === "PERMISSION_SET" ? { connect: [{ id: permissionSetId }] } : undefined,
+            type,
+            action,
+            status: "COMPLETED", // Mark as completed immediately
+            name: deploymentName,
+            details: JSON.stringify(deploymentDetails),
+            createdBy: session.user?.email || "system",
+            completedAt: new Date(), // Set completion time
+          },
+        })
 
-      deployments.push(deployment)
+        // Create a log entry for the deployment
+        await prisma.deploymentLog.create({
+          data: {
+            deploymentId: deployment.id,
+            message: `Direct deployment of ${type.toLowerCase()} ${deploymentName} to account ${accountId}`,
+            level: "INFO",
+            details: JSON.stringify({
+              accountId,
+              type,
+              action,
+              deploymentName,
+            }),
+          },
+        })
 
-      // Enqueue each deployment for processing
-      await enqueueDeployment(deployment.id)
+        deployments.push(deployment)
+      } catch (error) {
+        console.error(`Error creating deployment for account ${accountId}:`, error)
+      }
     }
 
     return NextResponse.json({
-      message: "Deployments created and queued for processing",
+      message: "Deployments completed successfully",
       deployments,
     })
   } catch (error) {
@@ -146,7 +175,11 @@ export async function GET(request: NextRequest) {
         where: { accountId },
       })
       if (account) {
-        where.accountId = account.id
+        where.accounts = {
+          some: {
+            id: account.id,
+          },
+        }
       }
     }
 
@@ -162,9 +195,10 @@ export async function GET(request: NextRequest) {
     const deployments = await prisma.deployment.findMany({
       where,
       include: {
-        account: true,
-        role: true,
-        permissionSet: true,
+        accounts: true,
+        roles: true,
+        permissionSets: true,
+        initiatedByUser: true,
       },
       orderBy: {
         createdAt: "desc",

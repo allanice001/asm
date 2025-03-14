@@ -32,7 +32,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 type Deployment = {
   id: string
   status: string
-  initiatedBy: string
+  createdBy: string
   createdAt: string
   updatedAt: string
   logs: string | null
@@ -97,7 +97,7 @@ export function DeploymentHistory() {
   const [deploymentConcurrency, setDeploymentConcurrency] = useState<number>(1)
 
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({})
-  const [refreshInterval, setRefreshInterval] = useState<number | null>(10000) // 10 seconds
+  const [refreshInterval] = useState<number | null>(10000) // 10 seconds
 
   // Fetch deployments and related data
   useEffect(() => {
@@ -564,7 +564,7 @@ export function DeploymentHistory() {
                           ? `${deployment.permissionSets.length} permission sets`
                           : ""}
                       </TableCell>
-                      <TableCell>{deployment.initiatedBy}</TableCell>
+                      <TableCell>{deployment.createdBy}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" onClick={() => handleViewDeployment(deployment)}>
                           View Details
@@ -618,7 +618,7 @@ export function DeploymentHistory() {
                     </div>
                     <div>
                       <div className="text-sm font-medium">Initiated By</div>
-                      <div className="text-sm">{selectedDeployment.initiatedBy}</div>
+                      <div className="text-sm">{selectedDeployment.createdBy}</div>
                     </div>
                     <div>
                       <div className="text-sm font-medium">Resources</div>
