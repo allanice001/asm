@@ -131,9 +131,10 @@ async function generateReportData(startDate: Date, endDate: Date) {
 			},
 		},
 		include: {
-			account: true,
-			role: true,
-			permissionSet: true,
+			// Use the correct field names as shown in the error message
+			accounts: true,
+			roles: true,
+			permissionSets: true,
 		},
 	})
 
@@ -147,7 +148,7 @@ async function generateReportData(startDate: Date, endDate: Date) {
 		accountStats.set(account.id, {
 			id: account.id,
 			name: account.name,
-			accountId: account.accountId,
+			accountId: account.id, // Using id as accountId since that's what we have
 			total: 0,
 			successful: 0,
 			failed: 0,
@@ -191,6 +192,17 @@ async function generateReportData(startDate: Date, endDate: Date) {
 
 	// Process deployments
 	deployments.forEach((deployment) => {
+		// Extract status from logs if available
+		let status = "PENDING"
+		if (deployment.logs) {
+			try {
+				const logs = JSON.parse(deployment.logs)
+				status = logs.status || "PENDING"
+			} catch (e) {
+				console.error("Error parsing deployment logs:", e)
+			}
+		}
+
 		const date = new Date(deployment.createdAt)
 		const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 
@@ -209,62 +221,68 @@ async function generateReportData(startDate: Date, endDate: Date) {
 		const dailyData = dailyTrend.get(dateKey)
 		dailyData.total++
 
-		// Update account stats
-		if (deployment.accountId) {
-			const accountStat = accountStats.get(deployment.accountId)
-			if (accountStat) {
-				accountStat.total++
+		// Update account stats for each connected account
+		if (deployment.accounts && deployment.accounts.length > 0) {
+			deployment.accounts.forEach((account) => {
+				const accountStat = accountStats.get(account.id)
+				if (accountStat) {
+					accountStat.total++
 
-				if (deployment.status === "COMPLETED") {
-					accountStat.successful++
-					dailyData.successful++
-				} else if (deployment.status === "FAILED") {
-					accountStat.failed++
-					dailyData.failed++
-				} else {
-					accountStat.pending++
-					dailyData.pending++
+					if (status === "COMPLETED") {
+						accountStat.successful++
+						dailyData.successful++
+					} else if (status === "FAILED") {
+						accountStat.failed++
+						dailyData.failed++
+					} else {
+						accountStat.pending++
+						dailyData.pending++
+					}
+
+					accountStat.successRate =
+						accountStat.total > 0 ? Math.round((accountStat.successful / accountStat.total) * 100) : 0
 				}
-
-				accountStat.successRate =
-					accountStat.total > 0 ? Math.round((accountStat.successful / accountStat.total) * 100) : 0
-			}
+			})
 		}
 
-		// Update role stats
-		if (deployment.roleId) {
-			const roleStat = roleStats.get(deployment.roleId)
-			if (roleStat) {
-				roleStat.total++
+		// Update role stats for each connected role
+		if (deployment.roles && deployment.roles.length > 0) {
+			deployment.roles.forEach((role) => {
+				const roleStat = roleStats.get(role.id)
+				if (roleStat) {
+					roleStat.total++
 
-				if (deployment.status === "COMPLETED") {
-					roleStat.successful++
-				} else if (deployment.status === "FAILED") {
-					roleStat.failed++
-				} else {
-					roleStat.pending++
+					if (status === "COMPLETED") {
+						roleStat.successful++
+					} else if (status === "FAILED") {
+						roleStat.failed++
+					} else {
+						roleStat.pending++
+					}
+
+					roleStat.successRate = roleStat.total > 0 ? Math.round((roleStat.successful / roleStat.total) * 100) : 0
 				}
-
-				roleStat.successRate = roleStat.total > 0 ? Math.round((roleStat.successful / roleStat.total) * 100) : 0
-			}
+			})
 		}
 
-		// Update permission set stats
-		if (deployment.permissionSetId) {
-			const psStat = permissionSetStats.get(deployment.permissionSetId)
-			if (psStat) {
-				psStat.total++
+		// Update permission set stats for each connected permission set
+		if (deployment.permissionSets && deployment.permissionSets.length > 0) {
+			deployment.permissionSets.forEach((ps) => {
+				const psStat = permissionSetStats.get(ps.id)
+				if (psStat) {
+					psStat.total++
 
-				if (deployment.status === "COMPLETED") {
-					psStat.successful++
-				} else if (deployment.status === "FAILED") {
-					psStat.failed++
-				} else {
-					psStat.pending++
+					if (status === "COMPLETED") {
+						psStat.successful++
+					} else if (status === "FAILED") {
+						psStat.failed++
+					} else {
+						psStat.pending++
+					}
+
+					psStat.successRate = psStat.total > 0 ? Math.round((psStat.successful / psStat.total) * 100) : 0
 				}
-
-				psStat.successRate = psStat.total > 0 ? Math.round((psStat.successful / psStat.total) * 100) : 0
-			}
+			})
 		}
 
 		// Update daily success rate
@@ -273,9 +291,45 @@ async function generateReportData(startDate: Date, endDate: Date) {
 
 	// Calculate overall stats
 	const totalDeployments = deployments.length
-	const successfulDeployments = deployments.filter((d) => d.status === "COMPLETED").length
-	const failedDeployments = deployments.filter((d) => d.status === "FAILED").length
-	const pendingDeployments = deployments.filter((d) => ["PENDING", "IN_PROGRESS"].includes(d.status)).length
+
+	// Count successful deployments based on status in logs
+	const successfulDeployments = deployments.filter((d) => {
+		if (d.logs) {
+			try {
+				const logs = JSON.parse(d.logs)
+				return logs.status === "COMPLETED"
+			} catch (e) {
+				return false
+			}
+		}
+		return false
+	}).length
+
+	// Count failed deployments based on status in logs
+	const failedDeployments = deployments.filter((d) => {
+		if (d.logs) {
+			try {
+				const logs = JSON.parse(d.logs)
+				return logs.status === "FAILED"
+			} catch (e) {
+				return false
+			}
+		}
+		return false
+	}).length
+
+	// Count pending deployments based on status in logs
+	const pendingDeployments = deployments.filter((d) => {
+		if (d.logs) {
+			try {
+				const logs = JSON.parse(d.logs)
+				return logs.status === "PENDING" || logs.status === "IN_PROGRESS"
+			} catch (e) {
+				return true // Default to pending if can't parse
+			}
+		}
+		return true // Default to pending if no logs
+	}).length
 
 	const overallSuccessRate = totalDeployments > 0 ? Math.round((successfulDeployments / totalDeployments) * 100) : 0
 

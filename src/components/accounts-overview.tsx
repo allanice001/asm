@@ -140,17 +140,17 @@ export function AccountsOverview() {
 
   // Calculate compliance status
   const getAccountStatus = (account: Account) => {
-    if (account.permissionSetAssignments.length === 0) {
+    if (account.permissionSetAssignments?.length === 0) {
       return "pending";
     }
 
     if (
-      account.permissionSetAssignments.some((a) => a.status === "out-of-sync")
+      account.permissionSetAssignments?.some((a) => a.status === "out-of-sync")
     ) {
       return "non-compliant";
     }
 
-    if (account.permissionSetAssignments.some((a) => a.status === "pending")) {
+    if (account.permissionSetAssignments?.some((a) => a.status === "pending")) {
       return "pending";
     }
 
@@ -251,7 +251,7 @@ export function AccountsOverview() {
                               </div>
                             )}
                             <div className="text-xs text-muted-foreground mt-1">
-                              {account.permissionSetAssignments.length}{" "}
+                              {account.permissionSetAssignments?.length}{" "}
                               permission sets assigned
                             </div>
                           </div>

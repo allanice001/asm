@@ -2,7 +2,6 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-// Remove the enqueueDeployment import since we'll do direct deployments
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,12 +82,14 @@ export async function POST(request: NextRequest) {
     const deployments = []
 
     for (const accountId of accountIds) {
-      // Check if the account exists - use a try/catch to handle potential model name differences
+      // Check if the account exists
       let account
       try {
-        // Try to find the account using the accountId field
+        // Try to find the account by ID
         account = await prisma.account.findFirst({
-          where: { accountId },
+          where: {
+            id: accountId,
+          },
         })
 
         if (!account) {
@@ -102,28 +103,48 @@ export async function POST(request: NextRequest) {
 
       // Create the deployment with the found account
       try {
-        // Create deployment record with COMPLETED status (direct deployment)
-        const deployment = await prisma.deployment.create({
-          data: {
-            accounts: {
-              connect: [{ id: account.id }],
-            },
-            roles: type === "ROLE" ? { connect: [{ id: roleId }] } : undefined,
-            permissionSets: type === "PERMISSION_SET" ? { connect: [{ id: permissionSetId }] } : undefined,
-            type,
-            action,
-            status: "COMPLETED", // Mark as completed immediately
-            name: deploymentName,
-            details: JSON.stringify(deploymentDetails),
-            createdBy: session.user?.email || "system",
-            completedAt: new Date(), // Set completion time
+        // Create deployment record based on the available fields in your schema
+        const deploymentData = {
+          accounts: {
+            connect: [{ id: account.id }],
           },
+          // Only include fields that exist in your schema
+          logs: JSON.stringify({
+            deploymentType: type,
+            action: action,
+            name: deploymentName,
+            details: deploymentDetails,
+            timestamp: new Date().toISOString(),
+            status: "COMPLETED",
+          }),
+        }
+
+        // Add role or permission set connection if applicable
+        if (type === "ROLE" && roleId) {
+          deploymentData.roles = { connect: [{ id: roleId }] }
+        } else if (type === "PERMISSION_SET" && permissionSetId) {
+          deploymentData.permissionSets = { connect: [{ id: permissionSetId }] }
+        }
+
+        // Add user connection if available
+        if (session.user?.email) {
+          const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+          })
+
+          if (user) {
+            deploymentData.initiatedByUser = { connect: { id: user.id } }
+          }
+        }
+
+        const deployment = await prisma.deployment.create({
+          data: deploymentData,
         })
 
         // Create a log entry for the deployment
         await prisma.deploymentLog.create({
           data: {
-            deploymentId: deployment.id,
+            deployment: { connect: { id: deployment.id } },
             message: `Direct deployment of ${type.toLowerCase()} ${deploymentName} to account ${accountId}`,
             level: "INFO",
             details: JSON.stringify({
@@ -162,8 +183,6 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url)
     const accountId = searchParams.get("accountId")
-    const status = searchParams.get("status")
-    const type = searchParams.get("type")
     const limit = Number.parseInt(searchParams.get("limit") || "50")
     const offset = Number.parseInt(searchParams.get("offset") || "0")
 
@@ -172,8 +191,9 @@ export async function GET(request: NextRequest) {
 
     if (accountId) {
       const account = await prisma.account.findFirst({
-        where: { accountId },
+        where: { id: accountId },
       })
+
       if (account) {
         where.accounts = {
           some: {
@@ -181,14 +201,6 @@ export async function GET(request: NextRequest) {
           },
         }
       }
-    }
-
-    if (status && ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"].includes(status)) {
-      where.status = status
-    }
-
-    if (type && ["ROLE", "PERMISSION_SET"].includes(type)) {
-      where.type = type
     }
 
     // Get deployments
@@ -199,6 +211,7 @@ export async function GET(request: NextRequest) {
         roles: true,
         permissionSets: true,
         initiatedByUser: true,
+        deploymentLogs: true,
       },
       orderBy: {
         createdAt: "desc",
