@@ -1,12 +1,11 @@
-import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
-import { compare } from "bcryptjs";
-import { UserRole } from "@prisma/client";
-import { getServerSession, NextAuthOptions } from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import bcrypt from "bcryptjs";
 
-export const authOptions: NextAuthOptions = {
+export const authOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
@@ -25,16 +24,16 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.password) {
-          return null;
+          throw new Error("User not found");
         }
 
-        const isPasswordValid = await compare(
+        const isPasswordValid = await bcrypt.compare(
           credentials.password,
           user.password,
         );
 
         if (!isPasswordValid) {
-          return null;
+          throw new Error("Invalid Credentials");
         }
 
         return {
@@ -46,75 +45,76 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+  session: {
+    strategy: "jwt",
+  },
+  pages: {
+    signIn: "/auth/signin",
+  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role;
         token.id = user.id;
+        token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
-      if (session?.user) {
-        session.user.role = token.role as UserRole;
-        session.user.id = token.id as string;
+      if (token && session.user) {
+        session.user.id = token.sub as string;
+        session.user.role = token.role as string;
       }
       return session;
     },
   },
-  pages: {
-    signIn: "/login",
-  },
-  session: {
-    strategy: "jwt",
-  },
-  secret: process.env.NEXTAUTH_SECRET,
 };
 
-export async function getSession() {
-  return await getServerSession(authOptions);
-}
-
 export async function getCurrentUser() {
-  const session = await getSession();
-  return session?.user;
-}
+  const session = await getServerSession(authOptions);
 
-export async function isAuthenticated() {
-  const session = await getSession();
-  return !!session?.user;
-}
-
-export async function hasRole(role: UserRole | UserRole[]) {
-  const session = await getSession();
-  if (!session?.user) return false;
-
-  if (Array.isArray(role)) {
-    return role.includes(session.user.role);
+  if (!session?.user?.email) {
+    return null;
   }
 
-  return session.user.role === role;
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+
+  return user;
 }
 
-export async function requireAuth(
-  req: NextRequest,
-  roles?: UserRole | UserRole[],
-) {
-  const session = await getSession();
+export async function isAdmin() {
+  const user = await getCurrentUser();
+  return user?.role === "admin";
+}
 
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function requireAdmin() {
+  const user = await getCurrentUser();
 
-  if (roles) {
-    const hasRequiredRole = Array.isArray(roles)
-      ? roles.includes(session.user.role)
-      : session.user.role === roles;
-
-    if (!hasRequiredRole) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  if (!user || user.role !== "admin") {
+    return NextResponse.json(
+      { message: "Unauthorized: Admin access required" },
+      { status: 403 },
+    );
   }
 
   return null;
+}
+
+export async function createAuditLog(
+  userId: string,
+  action: string,
+  resourceType: string,
+  resourceId: string,
+  details?: any,
+) {
+  return prisma.auditLog.create({
+    data: {
+      userId,
+      action,
+      resourceType,
+      resourceId,
+      details: details || {},
+    },
+  });
 }

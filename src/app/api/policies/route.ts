@@ -1,91 +1,83 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireAuth, getCurrentUser } from "@/lib/auth";
-import { UserRole } from "@prisma/client";
+import { type NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { getCurrentUser, createAuditLog } from "@/lib/auth"
 
-// Get all policies
-export async function GET(req: NextRequest) {
-  // Check if user is authenticated
-  const authError = await requireAuth(req);
-  if (authError) return authError;
-
+export async function GET(request: NextRequest) {
   try {
-    const policies = await prisma.policy.findMany({
-      include: {
-        roles: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
+    // Check if we need to filter by isAccountSpecific
+    const { searchParams } = new URL(request.url)
+    const isAccountSpecific = searchParams.get("isAccountSpecific") === "true"
 
-    return NextResponse.json({ policies });
+    const policies = await prisma.policy.findMany({
+      where: isAccountSpecific ? { isAccountSpecific: true } : undefined,
+      orderBy: {
+        name: "asc",
+      },
+    })
+
+    return NextResponse.json(policies)
   } catch (error) {
-    console.error("Error fetching policies:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch policies" },
-      { status: 500 },
-    );
+    console.error("Error fetching policies:", error)
+    return NextResponse.json({ message: "Error fetching policies" }, { status: 500 })
   }
 }
 
-// Create a new policy
-export async function POST(req: NextRequest) {
-  // Check if user is authenticated and has editor or admin role
-  const authError = await requireAuth(req, [UserRole.ADMIN, UserRole.EDITOR]);
-  if (authError) return authError;
+export async function POST(request: NextRequest) {
+  const currentUser = await getCurrentUser()
+
+  if (!currentUser) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
 
   try {
-    const { name, description, policyDocument, type } = await req.json();
+    const data = await request.json()
 
-    // Get current user
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 401 });
+    // Validate policy document
+    if (!data.isAwsManaged && !data.policyDocument) {
+      return NextResponse.json({ message: "Policy document is required for custom policies" }, { status: 400 })
     }
 
-    // Validate policy document is valid JSON
-    try {
-      JSON.parse(policyDocument);
-    } catch (e) {
-      return NextResponse.json(
-        { error: `Invalid policy document JSON: ${e}` },
-        { status: 400 },
-      );
+    // Validate AWS managed policy ARN
+    if (data.isAwsManaged && !data.policyArn) {
+      return NextResponse.json({ message: "Policy ARN is required for AWS managed policies" }, { status: 400 })
     }
 
+    // Create the policy
     const policy = await prisma.policy.create({
       data: {
-        name,
-        description,
-        policyDocument,
-        type: type || "CUSTOM",
+        name: data.name,
+        description: data.description || null,
+        policyDocument: data.policyDocument || {},
+        isAwsManaged: data.isAwsManaged || false,
+        policyArn: data.policyArn || null,
+        isAccountSpecific: data.isAccountSpecific || false,
       },
-    });
+    })
 
-    // Record change history
-    await prisma.policyChangeHistory.create({
-      data: {
-        policyId: policy.id,
-        changeType: "create",
-        newState: JSON.stringify({
-          name,
-          description,
-          policyDocument,
-          type: type || "CUSTOM",
-        }),
-        changedBy: user.id,
-      },
-    });
+    // Create the initial policy version
+    if (!data.isAwsManaged) {
+      await prisma.policyVersion.create({
+        data: {
+          policyId: policy.id,
+          versionNumber: 1,
+          policyDocument: data.policyDocument,
+          createdById: currentUser.id,
+          isActive: true,
+        },
+      })
+    }
 
-    return NextResponse.json({ policy });
+    // Create audit log
+    await createAuditLog(currentUser.id, "create", "policy", policy.id.toString(), {
+      name: policy.name,
+      isAwsManaged: policy.isAwsManaged,
+      isAccountSpecific: policy.isAccountSpecific,
+    })
+
+    return NextResponse.json(policy, { status: 201 })
   } catch (error) {
-    console.error("Error creating policy:", error);
-    return NextResponse.json(
-      { error: "Failed to create policy" },
-      { status: 500 },
-    );
+    console.error("Error creating policy:", error)
+    return NextResponse.json({ message: "Error creating policy" }, { status: 500 })
   }
 }
+

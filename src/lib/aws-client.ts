@@ -1,54 +1,54 @@
-import { fromSSO } from "@aws-sdk/credential-providers";
-import { defaultProvider } from "@aws-sdk/credential-provider-node";
-import { Organizations } from "@aws-sdk/client-organizations";
-import { IAM } from "@aws-sdk/client-iam";
-import { SSOAdmin } from "@aws-sdk/client-sso-admin";
 import { STSClient } from "@aws-sdk/client-sts";
+import { IAMClient } from "@aws-sdk/client-iam";
+import { OrganizationsClient } from "@aws-sdk/client-organizations";
+import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 
-// Get region from environment variables
-const region = process.env.AWS_REGION || "us-east-1";
+// Helper function to get AWS credentials from environment variables
+export function getAwsCredentials() {
+  // First check server-side environment variables
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const region = process.env.AWS_REGION || "us-east-1";
 
-// Configuration with role ARN if provided
-const getRoleConfig = () => {
-  const roleArn = process.env.AWS_ROLE_ARN;
-
-  if (roleArn) {
-    console.log(`Using role: ${roleArn}`);
-    return {
-      region,
-      credentials: defaultProvider({
-        roleArn,
-      }),
-    };
+  // If server-side credentials are not available, log a warning
+  if (!accessKeyId || !secretAccessKey) {
+    console.warn(
+      "Server-side AWS credentials not found. Using default credential provider chain.",
+    );
   }
 
-  // If no role ARN is provided, use SSO credentials
+  // Check if credentials are available
+  const hasCredentials = accessKeyId && secretAccessKey;
+
   return {
+    credentials: hasCredentials
+      ? {
+          accessKeyId,
+          secretAccessKey,
+        }
+      : undefined, // Let the AWS SDK use the default credential provider chain
     region,
-    credentials: fromSSO({ profile: "default" }),
+    hasCredentials,
   };
-};
+}
 
-// Create AWS clients with SSO credentials
-export const getOrganizationsClient = () => {
-  return new Organizations(getRoleConfig());
-};
+// Create AWS clients with the stored credentials
+export function createStsClient() {
+  const { credentials, region } = getAwsCredentials();
+  return new STSClient({ credentials, region });
+}
 
-export const getIAMClient = (assumedCredentials?: any) => {
-  if (assumedCredentials) {
-    return new IAM({
-      region,
-      credentials: assumedCredentials,
-    });
-  }
+export function createIamClient() {
+  const { credentials, region } = getAwsCredentials();
+  return new IAMClient({ credentials, region });
+}
 
-  return new IAM(getRoleConfig());
-};
+export function createOrganizationsClient() {
+  const { credentials, region } = getAwsCredentials();
+  return new OrganizationsClient({ credentials, region });
+}
 
-export const getSSOClient = () => {
-  return new SSOAdmin(getRoleConfig());
-};
-
-export const getSTSClient = () => {
-  return new STSClient(getRoleConfig());
-};
+export function createSsoAdminClient() {
+  const { credentials, region } = getAwsCredentials();
+  return new SSOAdminClient({ credentials, region });
+}

@@ -1,109 +1,168 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
-import { UserRole } from "@prisma/client";
+import { getCurrentUser, isAdmin, createAuditLog } from "@/lib/auth";
 
-// Get a specific user
 export async function GET(
-  req: NextRequest,
+  _req: Request,
   { params }: { params: { id: string } },
 ) {
-  // Check if user is authenticated and has admin role
-  const authError = await requireAuth(req, UserRole.ADMIN);
-  if (authError) return authError;
-
   try {
+    const isUserAdmin = await isAdmin();
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = params.id;
+    // Only admins can view other users
+    if (currentUser.id !== userId && !isUserAdmin) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id: userId },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json(user);
   } catch (error) {
     console.error("Error fetching user:", error);
     return NextResponse.json(
-      { error: "Failed to fetch user" },
+      { message: "Error fetching user" },
       { status: 500 },
     );
   }
 }
 
-// Update a user
 export async function PUT(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  // Check if user is authenticated and has admin role
-  const authError = await requireAuth(req, UserRole.ADMIN);
-  if (authError) return authError;
-
   try {
-    const { name, role, password } = await req.json();
+    const currentUser = await getCurrentUser();
 
-    // Prepare update data
-    const updateData: any = {
-      name,
-      role,
-    };
+    if (!currentUser) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
 
-    // If password is provided, hash it
-    if (password) {
-      updateData.password = await hash(password, 10);
+    const userId = params.id;
+
+    // Only admins can update other users
+    if (currentUser.id !== userId && currentUser.role !== "admin") {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+    }
+
+    const data = await request.json();
+
+    // Validate role if changing
+    if (data.role && !["user", "admin"].includes(data.role)) {
+      return NextResponse.json(
+        { message: "Invalid role. Must be 'user' or 'admin'" },
+        { status: 400 },
+      );
+    }
+
+    // Only admins can change roles
+    if (data.role && currentUser.role !== "admin") {
+      return NextResponse.json(
+        { message: "Unauthorized to change role" },
+        { status: 403 },
+      );
+    }
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     // Update user
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.role && currentUser.role === "admin") updateData.role = data.role;
+
     const user = await prisma.user.update({
-      where: { id: params.id },
+      where: { id: userId },
       data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
     });
 
-    return NextResponse.json({ user });
+    // Create audit log
+    await createAuditLog(currentUser.id, "update", "user", user.id.toString(), {
+      name: user.name,
+      role: user.role,
+    });
+
+    return NextResponse.json(user);
   } catch (error) {
     console.error("Error updating user:", error);
     return NextResponse.json(
-      { error: "Failed to update user" },
+      { message: "Error updating user" },
       { status: 500 },
     );
   }
 }
 
-// Delete a user
 export async function DELETE(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  // Check if user is authenticated and has admin role
-  const authError = await requireAuth(req, UserRole.ADMIN);
-  if (authError) return authError;
-
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser || currentUser.role !== "admin") {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+    }
+
+    const userId = params.id;
+
+    // Prevent deleting yourself
+    if (currentUser.id === userId) {
+      return NextResponse.json(
+        { message: "Cannot delete your own account" },
+        { status: 400 },
+      );
+    }
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    // Delete user
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id: userId },
+    });
+
+    // Create audit log
+    await createAuditLog(currentUser.id, "delete", "user", userId.toString(), {
+      name: existingUser.name,
+      email: existingUser.email,
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting user:", error);
     return NextResponse.json(
-      { error: "Failed to delete user" },
+      { message: "Error deleting user" },
       { status: 500 },
     );
   }

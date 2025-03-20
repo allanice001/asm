@@ -1,207 +1,148 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, getCurrentUser } from "@/lib/auth";
-import { UserRole } from "@prisma/client";
+import { getServerSession } from "next-auth";
 
-// Get a specific permission set
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  // Check if user is authenticated
-  const authError = await requireAuth(req);
-  if (authError) return authError;
-
   try {
+    const permissionSetId = params.id;
+
     const permissionSet = await prisma.permissionSet.findUnique({
-      where: { id: params.id },
-      include: {
-        assignments: {
-          include: {
-            account: true,
-          },
-        },
-        changeHistory: {
-          include: {
-            changedByUser: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
-      },
+      where: { id: permissionSetId },
     });
 
     if (!permissionSet) {
       return NextResponse.json(
-        { error: "Permission set not found" },
+        { message: "Permission set not found" },
         { status: 404 },
       );
     }
 
-    return NextResponse.json({ permissionSet });
+    return NextResponse.json(permissionSet);
   } catch (error) {
     console.error("Error fetching permission set:", error);
     return NextResponse.json(
-      { error: "Failed to fetch permission set" },
+      { message: "Error fetching permission set" },
       { status: 500 },
     );
   }
 }
 
-// Update a permission set
 export async function PUT(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  // Check if user is authenticated and has editor or admin role
-  const authError = await requireAuth(req, [UserRole.ADMIN, UserRole.EDITOR]);
-  if (authError) return authError;
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    const {
-      name,
-      description,
-      sessionDuration,
-      managedPolicies,
-      inlinePolicy,
-    } = await req.json();
+    const permissionSetId = params.id;
 
-    // Get current user
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 401 });
+    const data = await request.json();
+
+    // Validate session duration format (ISO 8601 duration)
+    if (
+      !/^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?$/.test(
+        data.sessionDuration,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Invalid session duration format. Use ISO 8601 duration format (e.g., PT8H)",
+        },
+        { status: 400 },
+      );
     }
 
-    // Get current state for change history
-    const currentPermissionSet = await prisma.permissionSet.findUnique({
-      where: { id: params.id },
+    // Check if permission set exists
+    const existingPermissionSet = await prisma.permissionSet.findUnique({
+      where: { id: permissionSetId },
     });
 
-    if (!currentPermissionSet) {
+    if (!existingPermissionSet) {
       return NextResponse.json(
-        { error: "Permission set not found" },
+        { message: "Permission set not found" },
         { status: 404 },
       );
+    }
+
+    // Check if name is already taken by another permission set
+    if (data.name !== existingPermissionSet.name) {
+      const nameExists = await prisma.permissionSet.findUnique({
+        where: { name: data.name },
+      });
+
+      if (nameExists) {
+        return NextResponse.json(
+          { message: "Permission set with this name already exists" },
+          { status: 409 },
+        );
+      }
     }
 
     // Update permission set
     const updatedPermissionSet = await prisma.permissionSet.update({
-      where: { id: params.id },
+      where: { id: permissionSetId },
       data: {
-        name,
-        description,
-        sessionDuration,
-        managedPolicies,
-        inlinePolicy,
+        name: data.name,
+        description: data.description || null,
+        sessionDuration: data.sessionDuration,
+        relayState: data.relayState || null,
+        updatedAt: new Date(),
       },
     });
 
-    // Record change history
-    await prisma.permissionSetChangeHistory.create({
-      data: {
-        permissionSetId: params.id,
-        changeType: "update",
-        previousState: JSON.stringify({
-          name: currentPermissionSet.name,
-          description: currentPermissionSet.description,
-          sessionDuration: currentPermissionSet.sessionDuration,
-          managedPolicies: currentPermissionSet.managedPolicies,
-          inlinePolicy: currentPermissionSet.inlinePolicy,
-        }),
-        newState: JSON.stringify({
-          name,
-          description,
-          sessionDuration,
-          managedPolicies,
-          inlinePolicy,
-        }),
-        changedBy: user.id,
-      },
-    });
-
-    // Mark all assignments as out-of-sync
-    await prisma.permissionSetAssignment.updateMany({
-      where: { permissionSetId: params.id },
-      data: { status: "out-of-sync" },
-    });
-
-    return NextResponse.json({ permissionSet: updatedPermissionSet });
+    return NextResponse.json(updatedPermissionSet);
   } catch (error) {
     console.error("Error updating permission set:", error);
     return NextResponse.json(
-      { error: "Failed to update permission set" },
+      { message: "Error updating permission set" },
       { status: 500 },
     );
   }
 }
 
-// Delete a permission set
 export async function DELETE(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  // Check if user is authenticated and has admin role
-  const authError = await requireAuth(req, UserRole.ADMIN);
-  if (authError) return authError;
+  const session = await getServerSession();
+
+  if (!session) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    // Get current user
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 401 });
-    }
+    const permissionSetId = params.id;
 
-    // Get current state for change history
-    const currentPermissionSet = await prisma.permissionSet.findUnique({
-      where: { id: params.id },
+    // Check if permission set exists
+    const existingPermissionSet = await prisma.permissionSet.findUnique({
+      where: { id: permissionSetId },
     });
 
-    if (!currentPermissionSet) {
+    if (!existingPermissionSet) {
       return NextResponse.json(
-        { error: "Permission set not found" },
+        { message: "Permission set not found" },
         { status: 404 },
       );
     }
 
-    // Record change history before deletion
-    await prisma.permissionSetChangeHistory.create({
-      data: {
-        permissionSetId: params.id,
-        changeType: "delete",
-        previousState: JSON.stringify({
-          name: currentPermissionSet.name,
-          description: currentPermissionSet.description,
-          sessionDuration: currentPermissionSet.sessionDuration,
-          managedPolicies: currentPermissionSet.managedPolicies,
-          inlinePolicy: currentPermissionSet.inlinePolicy,
-        }),
-        newState: "{}",
-        changedBy: user.id,
-      },
-    });
-
-    // Delete all assignments
-    await prisma.permissionSetAssignment.deleteMany({
-      where: { permissionSetId: params.id },
-    });
-
-    // Delete the permission set
+    // Delete permission set
     await prisma.permissionSet.delete({
-      where: { id: params.id },
+      where: { id: permissionSetId },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting permission set:", error);
     return NextResponse.json(
-      { error: "Failed to delete permission set" },
+      { message: "Error deleting permission set" },
       { status: 500 },
     );
   }

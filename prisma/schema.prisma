@@ -10,197 +10,188 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Account {
-  id                       String                        @id
-  name                     String
-  email                    String?
-  status                   String                        @default("active")
-  ouId                     String? // Add OU ID
-  ouName                   String? // Add OU Name
-  ouPath                   String? // Add OU Path
-  lastUpdated              DateTime                      @default(now())
-  createdAt                DateTime                      @default(now())
-  updatedAt                DateTime                      @updatedAt
-  deployments              Deployment[]
-  permissionSetAssignments PermissionSetAssignment[]
-  rolePolicyAssignments    AccountRolePolicyAssignment[] // Add this relation
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  emailVerified  DateTime?       @map("email_verified")
+  password       String
+  image          String?
+  role           String          @default("user")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @default(now()) @map("updated_at")
+  accounts       Account[]
+  sessions       Session[]
+  deployments    Deployment[]
+  auditLogs      AuditLog[]
+  policyVersions PolicyVersion[]
+
+  @@map("users")
 }
 
-// Auth.js models
-model User {
-  id                   String                       @id @default(cuid())
-  name                 String?
-  email                String                       @unique
-  emailVerified        DateTime?
-  image                String?
-  password             String?
-  role                 UserRole                     @default(VIEWER)
-  createdAt            DateTime                     @default(now())
-  updatedAt            DateTime                     @updatedAt
-  sessions             Session[]
-  deployments          Deployment[]                 @relation("InitiatedBy")
-  permissionSetChanges PermissionSetChangeHistory[] @relation("ChangedBy")
-  roleChanges          RoleChangeHistory[]          @relation("ChangedBy")
-  policyChanges        PolicyChangeHistory[]        @relation("ChangedBy")
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
 }
 
 model Session {
   id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
 }
 
-enum UserRole {
-  ADMIN
-  EDITOR
-  VIEWER
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
-model Role {
-  id                       String                        @id @default(cuid())
-  name                     String
-  description              String?
-  trustPolicy              String                        @db.Text
-  createdAt                DateTime                      @default(now())
-  updatedAt                DateTime                      @updatedAt
-  deployments              Deployment[]
-  changeHistory            RoleChangeHistory[]
-  policies                 Policy[]                      @relation("RolePolicies")
-  accountPolicyAssignments AccountRolePolicyAssignment[] // Add this relation
-}
+model AwsAccount {
+  id               String                  @id @default(cuid())
+  accountId        String                  @unique @map("account_id") @db.VarChar(12)
+  accountName      String                  @map("account_name")
+  accountEmail     String                  @map("account_email")
+  organizationId   String?                 @map("organization_id")
+  isManagement     Boolean                 @default(false) @map("is_management")
+  ouPath           String?                 @map("ou_path")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @default(now()) @map("updated_at")
+  permissionSets   AccountPermissionSet[]
+  specificPolicies AccountSpecificPolicy[]
+  deployments      Deployment[]
 
-model Policy {
-  id                     String                        @id @default(cuid())
-  name                   String
-  description            String?
-  policyDocument         String                        @db.Text
-  type                   PolicyType                    @default(CUSTOM)
-  createdAt              DateTime                      @default(now())
-  updatedAt              DateTime                      @updatedAt
-  roles                  Role[]                        @relation("RolePolicies")
-  changeHistory          PolicyChangeHistory[]
-  accountRoleAssignments AccountRolePolicyAssignment[] // Add this relation
-}
-
-// New model for account-specific role-policy assignments
-model AccountRolePolicyAssignment {
-  id        String   @id @default(cuid())
-  accountId String
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  roleId    String
-  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  policyId  String
-  policy    Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([accountId, roleId, policyId])
-}
-
-enum PolicyType {
-  AWS_MANAGED
-  CUSTOM
+  @@map("aws_accounts")
 }
 
 model PermissionSet {
-  id              String                       @id @default(cuid())
-  name            String
-  description     String?
-  sessionDuration String                       @default("PT8H")
-  managedPolicies String[]
-  inlinePolicy    String                       @db.Text
-  createdAt       DateTime                     @default(now())
-  updatedAt       DateTime                     @updatedAt
-  deployments     Deployment[]
-  changeHistory   PermissionSetChangeHistory[]
-  assignments     PermissionSetAssignment[]
+  id              String                 @id @default(cuid())
+  name            String                 @unique
+  description     String?                @db.Text
+  sessionDuration String                 @default("PT8H") @map("session_duration")
+  relayState      String?                @map("relay_state")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @default(now()) @map("updated_at")
+  policies        PermissionSetPolicy[]
+  accounts        AccountPermissionSet[]
+
+  @@map("permission_sets")
 }
 
-model PermissionSetAssignment {
-  id              String        @id @default(cuid())
-  permissionSetId String
-  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id])
-  accountId       String
-  account         Account       @relation(fields: [accountId], references: [id])
-  status          String        @default("pending") // pending, deployed, failed, out-of-sync
-  lastDeployedAt  DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+model Policy {
+  id                String                  @id @default(cuid())
+  name              String
+  description       String?                 @db.Text
+  policyDocument    Json                    @map("policy_document")
+  isAwsManaged      Boolean                 @default(false) @map("is_aws_managed")
+  policyArn         String?                 @map("policy_arn")
+  isAccountSpecific Boolean                 @default(false) @map("account_specific")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @default(now()) @map("updated_at")
+  permissionSets    PermissionSetPolicy[]
+  accountSpecific   AccountSpecificPolicy[]
+  versions          PolicyVersion[]
 
-  @@unique([permissionSetId, accountId])
+  @@map("policies")
+}
+
+model PermissionSetPolicy {
+  id              String        @id @default(cuid())
+  permissionSetId String        @map("permission_set_id")
+  policyId        String        @map("policy_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
+  policy          Policy        @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([permissionSetId, policyId])
+  @@map("permission_set_policies")
+}
+
+model AccountPermissionSet {
+  id              String        @id @default(cuid())
+  accountId       String        @map("account_id")
+  permissionSetId String        @map("permission_set_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  account         AwsAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, permissionSetId])
+  @@map("account_permission_sets")
+}
+
+model AccountSpecificPolicy {
+  id             String     @id @default(cuid())
+  accountId      String     @map("account_id")
+  policyId       String     @map("policy_id")
+  policyDocument Json       @map("policy_document")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @default(now()) @map("updated_at")
+  account        AwsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  policy         Policy     @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, policyId])
+  @@map("account_specific_policies")
 }
 
 model Deployment {
-  id              String          @id @default(cuid())
-  status          String          @default("pending") // pending, in-progress, success, failed
-  initiatedBy     String
-  initiatedByUser User?           @relation("InitiatedBy", fields: [initiatedBy], references: [id])
-  roles           Role[]
-  permissionSets  PermissionSet[]
-  accounts        Account[]
-  logs            String?         @db.Text
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  completedAt     DateTime?
-  deploymentLogs  DeploymentLog[] // Add this relation
+  id          String     @id @default(cuid())
+  userId      String     @map("user_id")
+  accountId   String     @map("account_id")
+  status      String
+  startedAt   DateTime   @default(now()) @map("started_at")
+  completedAt DateTime?  @map("completed_at")
+  logOutput   String?    @map("log_output") @db.Text
+  user        User       @relation(fields: [userId], references: [id])
+  account     AwsAccount @relation(fields: [accountId], references: [id])
+
+  @@map("deployments")
 }
 
-model DeploymentLog {
-  id           String     @id @default(cuid())
-  deploymentId String
-  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
-  message      String
-  details      String?    @db.Text
-  level        String     @default("INFO") // INFO, WARN, ERROR
-  createdAt    DateTime   @default(now())
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String   @map("resource_id")
+  details      Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
 }
 
-model PermissionSetChangeHistory {
-  id              String        @id @default(cuid())
-  permissionSetId String
-  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id])
-  changeType      String // create, update, delete
-  previousState   String?       @db.Text
-  newState        String        @db.Text
-  changedBy       String
-  changedByUser   User          @relation("ChangedBy", fields: [changedBy], references: [id])
-  createdAt       DateTime      @default(now())
-}
+model PolicyVersion {
+  id             String   @id @default(cuid())
+  policyId       String   @map("policy_id")
+  versionNumber  Int      @map("version_number")
+  policyDocument Json     @map("policy_document")
+  createdAt      DateTime @default(now()) @map("created_at")
+  createdById    String   @map("created_by_id")
+  isActive       Boolean  @default(false) @map("is_active")
+  policy         Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  createdBy      User     @relation(fields: [createdById], references: [id])
 
-model RoleChangeHistory {
-  id            String   @id @default(cuid())
-  roleId        String
-  role          Role     @relation(fields: [roleId], references: [id])
-  changeType    String // create, update, delete
-  previousState String?  @db.Text
-  newState      String   @db.Text
-  changedBy     String
-  changedByUser User     @relation("ChangedBy", fields: [changedBy], references: [id])
-  createdAt     DateTime @default(now())
-}
-
-model PolicyChangeHistory {
-  id            String   @id @default(cuid())
-  policyId      String
-  policy        Policy   @relation(fields: [policyId], references: [id])
-  changeType    String // create, update, delete
-  previousState String?  @db.Text
-  newState      String   @db.Text
-  changedBy     String
-  changedByUser User     @relation("ChangedBy", fields: [changedBy], references: [id])
-  createdAt     DateTime @default(now())
-}
-
-model DeploymentReport {
-  id          String   @id @default(cuid())
-  name        String
-  period      String // DAILY, WEEKLY, MONTHLY
-  startDate   DateTime
-  endDate     DateTime
-  createdAt   DateTime @default(now())
-  data        String // JSON data containing the report
-  createdBy   String?
-  isScheduled Boolean  @default(false)
+  @@unique([policyId, versionNumber])
+  @@map("policy_versions")
 }
