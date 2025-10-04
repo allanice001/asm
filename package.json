@@ -10,7 +10,7 @@
     "seed:admin": "ts-node scripts/seed-admin.ts"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.8.0",
+    "@auth/prisma-adapter": "^2.9.1",
     "@aws-sdk/client-iam": "^3.772.0",
     "@aws-sdk/client-organizations": "^3.772.0",
     "@aws-sdk/client-sns": "^3.772.0",
