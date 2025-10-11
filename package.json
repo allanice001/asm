@@ -35,7 +35,7 @@
     "@radix-ui/react-toast": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@tanstack/react-query": "^5.68.0",
-    "@vercel/functions": "^2.1.0",
+    "@vercel/functions": "^2.2.13",
     "aws-cdk-lib": "^2.182.0",
     "aws-lambda": "^1.0.7",
     "bcryptjs": "^3.0.2",
