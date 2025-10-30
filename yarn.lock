@@ -1117,10 +1117,10 @@
   resolved "https://registry.yarnpkg.com/@pkgjs/parseargs/-/parseargs-0.11.0.tgz#a77ea742fab25775145434eb1d2328cf5013ac33"
   integrity sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==
 
-"@prisma/client@^6.17.0":
-  version "6.17.1"
-  resolved "https://registry.yarnpkg.com/@prisma/client/-/client-6.17.1.tgz#308f3bf7d050316578aa7fd6cd9deca671561f04"
-  integrity sha512-zL58jbLzYamjnNnmNA51IOZdbk5ci03KviXCuB0Tydc9btH2kDWsi1pQm2VecviRTM7jGia0OPPkgpGnT3nKvw==
+"@prisma/client@^6.18.0":
+  version "6.18.0"
+  resolved "https://registry.yarnpkg.com/@prisma/client/-/client-6.18.0.tgz#95f0efe03b5827d9bf5c80b6b7298e46094b5fbf"
+  integrity sha512-jnL2I9gDnPnw4A+4h5SuNn8Gc+1mL1Z79U/3I9eE2gbxJG1oSA+62ByPW4xkeDgwE0fqMzzpAZ7IHxYnLZ4iQA==
 
 "@prisma/config@6.5.0":
   version "6.5.0"
