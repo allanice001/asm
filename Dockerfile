@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM node:22.11.0-alpine@sha256:b64ced2e7cd0a4816699fe308ce6e8a08ccba463c757c00c14cd372e3d2c763e AS builder
+FROM node:22.12.0-alpine@sha256:51eff88af6dff26f59316b6e356188ffa2c422bd3c3b76f2556a2e7e89d080bd AS builder
 WORKDIR /app
 
 # Install dependencies for node-gyp (if needed)
@@ -22,7 +22,7 @@ ENV NODE_ENV production
 RUN npm run build
 
 # Stage 2: Run the application
-FROM node:22.11.0-alpine@sha256:b64ced2e7cd0a4816699fe308ce6e8a08ccba463c757c00c14cd372e3d2c763e AS runner
+FROM node:22.12.0-alpine@sha256:51eff88af6dff26f59316b6e356188ffa2c422bd3c3b76f2556a2e7e89d080bd AS runner
 WORKDIR /app
 
 # Set environment variables
