@@ -36,7 +36,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.68.0",
     "@vercel/functions": "^2.1.0",
-    "aws-cdk-lib": "^2.220.0",
+    "aws-cdk-lib": "^2.222.0",
     "aws-lambda": "^1.0.7",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
