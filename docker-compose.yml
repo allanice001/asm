@@ -36,7 +36,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   pgweb:
-    image: sosedoff/pgweb
+    image: sosedoff/pgweb@sha256:a5256d416e2e8b92d69a4459058e3eca33a9f075d8325491644411d0bc3bd70b
     restart: always
     ports:
       - "8081:8081"
@@ -49,7 +49,7 @@ services:
       - postgres
 
   mailpit:
-    image: axllent/mailpit
+    image: axllent/mailpit@sha256:27cfb8893806ed676042a00f4db70325a0d57cc5217349d210b6dd903e1a7e67
     restart: always
     ports:
       - "1025:1025"
