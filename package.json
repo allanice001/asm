@@ -12,7 +12,7 @@
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
     "@aws-sdk/client-iam": "^3.939.0",
-    "@aws-sdk/client-organizations": "^3.939.0",
+    "@aws-sdk/client-organizations": "^3.950.0",
     "@aws-sdk/client-sns": "^3.939.0",
     "@aws-sdk/client-sso-admin": "^3.939.0",
     "@aws-sdk/client-sts": "^3.939.0",
